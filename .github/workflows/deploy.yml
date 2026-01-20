@@ -25,6 +25,7 @@ jobs:
       - name: Execute Deploy Script
         uses: appleboy/ssh-action@v1.0.3
         with:
+          command_timeout: 30m
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
