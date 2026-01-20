@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  address     String?
+  lawFirmName String?
+  logoUrl     String?
+  oab         String?
+  oabState    String?
+  phone       String?
+  cases         Case[]
+  chatMessages  ChatMessage[]
+
+  @@index([email])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  role      String
+  content   String   @db.Text
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+
+model Case {
+  id                   String              @id @default(uuid())
+  title                String
+  court                String?
+  status               String              @default("active")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  userId               String
+  caseNumber           String?             @map("number")
+  caseType             String              @map("subject")
+  clientName           String              @map("plaintiff")
+  description          String?
+  judge                String?
+  opposingParty        String?             @map("defendant")
+  nextHearing          DateTime?
+  thesis               String?             @db.Text
+  autoCreated          Boolean             @default(false)
+  documentAnalysis     Json?
+  originalDocumentType String?
+  originalDocumentUrl  String?
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseSummary          Json?
+  documents            Document[]
+  timeline             TimelineEvent[]
+  deadlines            Deadline[]
+  generatedDocuments   GeneratedDocument[]
+  jurisprudence        Jurisprudence[]     @relation("CaseJurisprudence")
+  searchHistory        SearchHistory[]
+  updates              CaseUpdate[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([autoCreated])
+  @@index([caseNumber], map: "Case_caseNumber_idx")
+}
+
+model CaseUpdate {
+  id          String   @id @default(uuid())
+  caseId      String
+  date        DateTime
+  description String
+  source      String   @default("Diário Oficial")
+  createdAt   DateTime @default(now())
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([date])
+}
+
+model Document {
+  id                String   @id @default(uuid())
+  name              String
+  type              String
+  path              String
+  status            String   @default("pending") // pending, processing, classified, summarized, error
+  summary           String?  // Legacy or simple summary
+  classification    Json?    // { type: "Peticao Inicial", confidence: 98 }
+  individualSummary Json?    // Structured summary based on template
+  extractedTextPath String?  // Path to the .txt file
+  caseId            String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  case              Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
+
+model TimelineEvent {
+  id          String   @id @default(uuid())
+  caseId      String
+  title       String
+  description String?
+  type        String
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([date])
+}
+
+model Jurisprudence {
+  id            String   @id(map: "SavedJurisprudence_pkey") @default(uuid())
+  caseId        String
+  court         String
+  number        String
+  date          String
+  summary       String
+  understanding String
+  link          String
+  relevance     Int
+  notes         String?
+  tags          String[] @default([])
+  isFavorite    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  ementa        String?
+  case          Case     @relation("CaseJurisprudence", fields: [caseId], references: [id], onDelete: Cascade, map: "SavedJurisprudence_caseId_fkey")
+
+  @@index([caseId], map: "SavedJurisprudence_caseId_idx")
+  @@index([court], map: "SavedJurisprudence_court_idx")
+  @@index([isFavorite], map: "SavedJurisprudence_isFavorite_idx")
+}
+
+model SearchHistory {
+  id           String   @id @default(uuid())
+  caseId       String?
+  query        String
+  court        String?
+  resultsCount Int
+  createdAt    DateTime @default(now())
+  case         Case?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([createdAt])
+}
+
+model Deadline {
+  id          String    @id @default(uuid())
+  caseId      String
+  title       String
+  description String?
+  dueDate     DateTime
+  priority    String    @default("medium")
+  status      String    @default("pending")
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  case        Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([dueDate])
+  @@index([status])
+  @@index([priority])
+  @@index([completed])
+}
+
+model GeneratedDocument {
+  id          String   @id @default(uuid())
+  caseId      String
+  userId      String
+  type        String
+  title       String
+  content     String
+  htmlContent String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}

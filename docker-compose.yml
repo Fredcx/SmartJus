@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: legal-system-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: legal_system
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - legal-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: legal-system-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=production
+    expose:
+      - "3002"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - legal-network
+      - npm_default
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: legal-system-frontend
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - legal-network
+      - npm_default
+
+volumes:
+  postgres_data:
+
+networks:
+  legal-network:
+    driver: bridge
+  npm_default:
+    external: true
+
