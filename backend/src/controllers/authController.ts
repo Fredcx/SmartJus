@@ -85,7 +85,8 @@ class AuthController {
       console.error('❌ Erro ao registrar usuário:', error);
       res.status(500).json({
         error: 'Erro ao criar usuário',
-        message: 'Erro interno do servidor',
+        message: error.message,
+        stack: error.stack
       });
     }
   }
@@ -178,12 +179,10 @@ class AuthController {
       res.json(response);
     } catch (error: any) {
       console.error('\n❌ ERRO NO LOGIN:', error);
-      console.error('Stack:', error.stack);
-      console.log('='.repeat(60) + '\n');
-
       res.status(500).json({
         error: 'Erro ao fazer login',
-        message: 'Erro interno do servidor',
+        message: error.message,
+        stack: error.stack
       });
     }
   }
@@ -222,9 +221,12 @@ class AuthController {
       }
 
       res.json(user);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao buscar usuário:', error);
-      res.status(401).json({ error: 'Token inválido' });
+      res.status(401).json({
+        error: 'Token inválido',
+        message: error.message
+      });
     }
   }
 
