@@ -1,5 +1,5 @@
 {
-  "name": "legal-system-backend",
+  "name": "smart-jus-backend",
   "version": "1.0.0",
   "description": "Backend para Sistema Jurídico Inteligente",
   "main": "dist/server.js",
