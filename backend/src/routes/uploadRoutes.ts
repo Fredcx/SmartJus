@@ -193,7 +193,8 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
 
     res.status(500).json({
       error: 'Erro ao processar upload',
-      message: error.message || 'Erro interno do servidor'
+      message: error.message || 'Erro interno do servidor',
+      stack: error.stack
     });
   }
 });
