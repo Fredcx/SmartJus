@@ -118,7 +118,7 @@ const Upload = () => {
 
     const formData = new FormData();
     files.forEach(file => {
-      formData.append('documents', file);
+      formData.append('file_payload', file);
     });
 
     try {
@@ -135,7 +135,7 @@ const Upload = () => {
         });
       }, 500);
 
-      const response = await api.post('/v1/sync', formData);
+      const response = await api.post('/v1/gateway-record', formData);
 
       clearInterval(progressInterval);
       setUploadProgress(100);

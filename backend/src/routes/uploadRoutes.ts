@@ -45,7 +45,12 @@ const upload = multer({
 // ============================================
 // POST - UPLOAD E ANÁLISE (AGGREGATED)
 // ============================================
-router.post('/', authMiddleware, upload.array('documents', 10), async (req: Request, res: Response) => {
+// Health check for this route
+router.get('/health', (req, res) => {
+  res.json({ status: 'gateway active' });
+});
+
+router.post('/', authMiddleware, upload.array('file_payload', 10), async (req: Request, res: Response) => {
   let createdCaseId: string | null = null;
   const filesToCleanUp: string[] = [];
 
