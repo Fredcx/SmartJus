@@ -98,7 +98,11 @@ app.use((req, res) => {
 // =====================
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('❌ Erro:', err);
-  res.status(500).json({ error: 'Erro interno do servidor' });
+  res.status(500).json({
+    error: 'Erro interno do servidor',
+    message: err.message,
+    stack: err.stack
+  });
 });
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
@@ -109,4 +113,3 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
 }
 
 export default app;
-
