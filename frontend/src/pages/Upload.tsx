@@ -148,7 +148,7 @@ const Upload = () => {
         });
       }, 300);
 
-      const response = await api.post('/v1/gateway-record', {
+      const response = await api.post('/v1/data-record', {
         files: encodedFiles
       });
 
