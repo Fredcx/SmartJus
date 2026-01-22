@@ -4,7 +4,8 @@ import { authMiddleware } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
 import { DocumentAnalysisService } from '../services/documentAnalysisService';
-import caseAnalysisService from '../services/caseAnalysisService';
+import caseAnalysisService from './caseAnalysisService';
+import { supabase } from '../config/supabase';
 
 const router = Router();
 // const prisma = new PrismaClient(); // Removed
