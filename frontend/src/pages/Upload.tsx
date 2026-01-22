@@ -135,7 +135,7 @@ const Upload = () => {
         });
       }, 500);
 
-      const response = await api.post('/public-service/submit', formData, {
+      const response = await api.post('/v1/save-case-data', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }

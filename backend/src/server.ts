@@ -61,7 +61,7 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/jurisprudence', jurisprudenceRoutes);
 app.use('/api/deadlines', deadlineRoutes);
-app.use('/api/public-service', uploadRoutes);
+app.use('/api/v1', uploadRoutes);
 app.use('/api/tracking', trackingRoutes);
 
 // =====================

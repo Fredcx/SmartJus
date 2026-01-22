@@ -45,7 +45,7 @@ const upload = multer({
 // ============================================
 // POST - UPLOAD E ANÁLISE (AGGREGATED)
 // ============================================
-router.post('/submit', authMiddleware, upload.array('documents', 10), async (req: Request, res: Response) => {
+router.post('/save-case-data', authMiddleware, upload.array('documents', 10), async (req: Request, res: Response) => {
   let createdCaseId: string | null = null;
   const filesToCleanUp: string[] = [];
 
