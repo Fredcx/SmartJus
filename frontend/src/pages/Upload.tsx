@@ -116,43 +116,6 @@ const Upload = () => {
     setIsUploading(true);
     setUploadProgress(0);
 
-    const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks
-    const THRESHOLD = 3.5 * 1024 * 1024; // 3.5MB threshold
-
-    const uploadFileInChunks = async (file: File) => {
-      const uploadId = Math.random().toString(36).substring(7) + '-' + Date.now();
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-      console.log(`📦 Chunking file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB) into ${totalChunks} chunks`);
-
-      let lastResponse = null;
-
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunkBlob = file.slice(start, end);
-
-        const base64Chunk = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(chunkBlob);
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        });
-
-        setUploadProgress(Math.round(((i + 0.5) / totalChunks) * 100));
-
-        lastResponse = await api.post('/v1/data-record/chunk', {
-          uploadId,
-          chunkIndex: i,
-          totalChunks,
-          chunk: base64Chunk,
-          fileName: file.name,
-          fileType: file.type
-        });
-      }
-
-      return lastResponse;
-    };
-
     const fileToBase64 = (file: File): Promise<string> => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -165,29 +128,21 @@ const Upload = () => {
     let progressInterval: any = null;
 
     try {
-      let response;
+      console.log('🚀 Usando modo DIRECT (Base64)...');
 
-      // Se for apenas 1 arquivo e for grande, usamos chunking
-      if (files.length === 1 && files[0].size > THRESHOLD) {
-        console.log('🚀 Usando modo CHUNKED para arquivo grande...');
-        response = await uploadFileInChunks(files[0]);
-      } else {
-        console.log('🚀 Usando modo DIRECT (Base64)...');
+      progressInterval = setInterval(() => {
+        setUploadProgress(prev => (prev >= 90 ? 90 : prev + 5));
+      }, 300);
 
-        progressInterval = setInterval(() => {
-          setUploadProgress(prev => (prev >= 90 ? 90 : prev + 5));
-        }, 300);
+      const encodedFiles = await Promise.all(files.map(async (file) => ({
+        name: file.name,
+        mimetype: file.type,
+        base64: await fileToBase64(file)
+      })));
 
-        const encodedFiles = await Promise.all(files.map(async (file) => ({
-          name: file.name,
-          mimetype: file.type,
-          base64: await fileToBase64(file)
-        })));
-
-        response = await api.post('/v1/data-record', {
-          files: encodedFiles
-        });
-      }
+      const response = await api.post('/v1/data-record', {
+        files: encodedFiles
+      });
 
       if (progressInterval) clearInterval(progressInterval);
       setUploadProgress(100);

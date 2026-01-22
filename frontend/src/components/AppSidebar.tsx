@@ -29,7 +29,7 @@ export function AppSidebar() {
       <SidebarContent>
         <div className="p-4">
           {state !== "collapsed" && (
-            <h2 className="text-lg font-bold text-foreground">SmartJust</h2>
+            <h2 className="text-lg font-bold text-foreground">SmartJus</h2>
           )}
         </div>
 
