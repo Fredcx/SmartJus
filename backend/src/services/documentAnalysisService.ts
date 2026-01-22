@@ -42,7 +42,7 @@ export class DocumentAnalysisService {
 
     try {
       // Tenta usar o modelo configurado ou um padrão
-      const configuredModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+      const configuredModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
       console.log('🤖 Configurando modelo Gemini (inicial):', configuredModel);
 
       this.model = this.genAI.getGenerativeModel({
@@ -91,7 +91,8 @@ export class DocumentAnalysisService {
         return result.value;
       }
 
-      if (type === 'txt' || type.includes('text/plain') || type.includes('txt')) {
+      const typeLower = type.toLowerCase();
+      if (typeLower === 'txt' || typeLower.includes('text/plain') || typeLower.includes('txt') || typeLower.includes('json')) {
         const text = buffer.toString('utf-8');
         if (!text || text.trim().length === 0) throw new Error('Arquivo TXT está vazio');
         return text;
@@ -144,12 +145,13 @@ REGRAS: Use null se não encontrar. Responda APENAS JSON puro.`;
 
       // LISTA DE MODELOS DE FALLBACK (AUTO-CORREÇÃO)
       const fallbackModels = [
+        'gemini-2.0-flash',
+        'gemini-flash-latest',
         'gemini-1.5-flash',
-        'gemini-1.5-flash-001',
         'gemini-1.5-flash-latest'
       ];
 
-      const currentModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+      const currentModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
       // Tenta o atual e depois os outros da lista
       const modelsToTry = [currentModel, ...fallbackModels.filter(m => m !== currentModel)];
 

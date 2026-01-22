@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../config/database'; // Singleton import
+// @ts-ignore
+import fs from 'fs-extra';
+import os from 'os';
 import { authMiddleware } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
@@ -42,34 +45,12 @@ const upload = multer({
 // ============================================
 // POST - UPLOAD E ANÁLISE
 // ============================================
-// ============================================
-// POST - UPLOAD E ANÁLISE (AGGREGATED)
-// ============================================
-router.post('/', authMiddleware, async (req: Request, res: Response) => {
+// =====================
+// SHARED PROCESSING LOGIC
+// =====================
+async function processFileBuffers(files: { originalname: string, buffer: Buffer, mimetype: string }[], userId: string) {
   let createdCaseId: string | null = null;
-  const filesToCleanUp: string[] = [];
-
   try {
-    console.log('DEBUG: Gateway Route Hit (Base64 Mode)');
-    const userId = (req as any).user.userId;
-    const { files: bodyFiles } = req.body;
-
-    if (!bodyFiles || bodyFiles.length === 0) {
-      return res.status(400).json({
-        error: 'Nenhum arquivo enviado',
-        message: 'Por favor, envie pelo menos um arquivo PDF, DOCX ou TXT'
-      });
-    }
-
-    console.log(`📤 NOVO UPLOAD (JSON/Base64): ${bodyFiles.length} arquivo(s)`);
-
-    // Convert base64 to buffers
-    const files = bodyFiles.map((f: any) => ({
-      originalname: f.name,
-      buffer: Buffer.from(f.base64, 'base64'),
-      mimetype: f.mimetype || 'application/pdf'
-    }));
-
     console.log('\n' + '='.repeat(70));
     console.log(`📤 PROCESSANDO: ${files.length} arquivo(s) em memória`);
     console.log('='.repeat(70));
@@ -106,12 +87,6 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 
     // 2. ANALYZE COMBINED TEXT
     console.log('\n🤖 ETAPA 2: Analisando contexto unificado com IA...');
-    const isLegalDoc = analysisService.validateLegalDocument(combinedText);
-
-    if (!isLegalDoc) {
-      console.warn('⚠️ O conteúdo combinado não parece jurídico, mas prosseguindo com análise genérica.');
-    }
-
     const analysis = await analysisService.analyzeDocument(combinedText);
     console.log('✅ Análise unificada concluída:', analysis.documentType);
 
@@ -178,28 +153,118 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       console.error(`   ⚠️ Falha no resumo estratégico background:`, err);
     });
 
-    // Response
+    return {
+      success: true,
+      case: newCase,
+      analysis
+    };
+
+  } catch (error: any) {
+    console.error('❌ Error in processFileBuffers:', error);
+    throw error;
+  }
+}
+
+// ============================================
+// POST - UPLOAD E ANÁLISE (AGGREGATED)
+// ============================================
+router.post('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { files: bodyFiles } = req.body;
+
+    if (!bodyFiles || bodyFiles.length === 0) {
+      return res.status(400).json({
+        error: 'Nenhum arquivo enviado',
+        message: 'Por favor, envie pelo menos um arquivo PDF, DOCX ou TXT'
+      });
+    }
+
+    const files = bodyFiles.map((f: any) => ({
+      originalname: f.name,
+      buffer: Buffer.from(f.base64, 'base64'),
+      mimetype: f.mimetype || 'application/pdf'
+    }));
+
+    const result = await processFileBuffers(files, userId);
+
     res.status(201).json({
       success: true,
       message: 'Documentos analisados e processo criado com sucesso',
-      case: newCase,
+      case: result.case,
       analysis: {
-        documentType: analysis.documentType,
-        summary: analysis.summary,
-        confidence: analysis.confidence,
-        extractedData: analysis.extractedData,
+        documentType: result.analysis.documentType,
+        summary: result.analysis.summary,
+        confidence: result.analysis.confidence,
+        extractedData: result.analysis.extractedData,
       },
       fileCount: files.length
     });
 
   } catch (error: any) {
     console.error('\n❌ ERRO NO UPLOAD:', error);
-
     res.status(500).json({
       error: 'Erro ao processar upload',
-      message: error.message || 'Erro interno do servidor',
-      stack: error.stack
+      message: error.message || 'Erro interno do servidor'
     });
+  }
+});
+
+// ============================================
+// POST - CHUNKED UPLOAD
+// ============================================
+router.post('/chunk', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { uploadId, chunkIndex, totalChunks, chunk, fileName, fileType } = req.body;
+
+    if (!uploadId || chunkIndex === undefined || !totalChunks || !chunk) {
+      return res.status(400).json({ error: 'Faltam metadados do chunk' });
+    }
+
+    const tempDir = path.join(os.tmpdir(), 'smart-jus-uploads', uploadId);
+    await fs.ensureDir(tempDir);
+
+    const chunkPath = path.join(tempDir, `chunk-${chunkIndex}`);
+    await fs.writeFile(chunkPath, Buffer.from(chunk, 'base64'));
+
+    console.log(`📥 Chunk ${chunkIndex + 1}/${totalChunks} recebido para ${uploadId}`);
+
+    if (chunkIndex === totalChunks - 1) {
+      console.log(`🔄 Reassembling file: ${fileName}...`);
+
+      const chunkFiles = [];
+      for (let i = 0; i < totalChunks; i++) {
+        chunkFiles.push(path.join(tempDir, `chunk-${i}`));
+      }
+
+      const buffers = await Promise.all(chunkFiles.map(f => fs.readFile(f)));
+      const finalBuffer = Buffer.concat(buffers);
+
+      console.log(`✅ File reassembled! Total size: ${(finalBuffer.length / 1024).toFixed(2)} KB`);
+
+      const result = await processFileBuffers([{
+        originalname: fileName,
+        buffer: finalBuffer,
+        mimetype: fileType || 'application/pdf'
+      }], userId);
+
+      // Cleanup
+      await fs.remove(tempDir);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Arquivo reassemblado e processado com sucesso',
+        case: result.case,
+        analysis: result.analysis
+      });
+    }
+
+    res.status(200).json({ success: true, message: `Chunk ${chunkIndex} recebido` });
+
+  } catch (error: any) {
+    console.error('❌ ERRO NO CHUNK:', error);
+    res.status(500).json({ error: 'Erro ao processar chunk', message: error.message });
   }
 });
 

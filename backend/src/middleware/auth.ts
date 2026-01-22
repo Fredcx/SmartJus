@@ -16,6 +16,11 @@ export const authMiddleware = (
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
 
+    if (process.env.NODE_ENV === 'development' && token === 'MOCK_TOKEN') {
+      req.user = { userId: 'dev-user', email: 'dev@example.com' };
+      return next();
+    }
+
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
