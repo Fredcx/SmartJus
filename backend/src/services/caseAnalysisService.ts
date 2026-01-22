@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import prisma from '../config/database';
 import { GLOBAL_CASE_SUMMARY_TEMPLATE } from '../utils/documentTemplates';
-import fs from 'fs';
+import { supabase } from '../config/supabase';
 
 export class CaseAnalysisService {
     private genAI: GoogleGenerativeAI;
@@ -45,8 +45,16 @@ INFORMAÇÕES:
                 let docContent = "N/A";
                 if (doc.extractedTextPath) {
                     try {
-                        if (fs.existsSync(doc.extractedTextPath)) docContent = fs.readFileSync(doc.extractedTextPath, 'utf-8').substring(0, 5000);
-                    } catch (e) { }
+                        const { data, error } = await supabase.storage
+                            .from('documents')
+                            .download(doc.extractedTextPath);
+
+                        if (data && !error) {
+                            docContent = (await data.text()).substring(0, 5000);
+                        }
+                    } catch (e) {
+                        console.error(`Error fetching text from Supabase for doc ${doc.id}:`, e);
+                    }
                 } else if (doc.individualSummary) {
                     docContent = JSON.stringify(doc.individualSummary);
                 } else if (doc.summary) {

@@ -124,9 +124,7 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
     createdCaseId = newCase.id;
     console.log('✅ Processo criado:', newCase.id);
 
-    // 4. UPLOAD TO SUPABASE AND CREATE DOCUMENT RECORDS
     console.log('   📎 Enviando arquivos para Supabase e vinculando ao processo...');
-    const { supabase } = await import('../config/supabase');
 
     for (const info of fileInfos) {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -174,11 +172,6 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
     caseAnalysisService.generateGlobalSummary(newCase.id).catch(err => {
       console.error(`   ⚠️ Falha no resumo estratégico background:`, err);
     });
-
-    // Get the primary document URL (first one uploaded)
-    const { data: publicUrlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(`${newCase.id}/document-${Date.now()}`); // Placeholder or actual path if we had it
 
     // Response
     res.status(201).json({
