@@ -17,8 +17,8 @@ async function testBase64Upload() {
     };
 
     try {
-        console.log('🚀 Enviando requisicao Base64 para http://localhost:3002/api/v1/gateway-record...');
-        const response = await axios.post('http://localhost:3002/api/v1/gateway-record', payload);
+        console.log('🚀 Enviando requisicao Base64 para http://localhost:3002/api/v1/data-record...');
+        const response = await axios.post('http://localhost:3002/api/v1/data-record', payload);
         console.log('✅ Resposta:', response.status, response.data);
     } catch (error) {
         if (error.response) {
