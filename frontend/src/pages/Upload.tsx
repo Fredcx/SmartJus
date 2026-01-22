@@ -167,9 +167,20 @@ const Upload = () => {
     } catch (error: any) {
       console.error('❌ Erro ao fazer upload:', error);
 
-      const errorMessage = error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Erro ao processar os arquivos';
+      let errorMessage = 'Erro ao processar os arquivos';
+
+      if (error.response?.data) {
+        const data = error.response.data;
+        if (typeof data.error === 'string') {
+          errorMessage = data.error;
+        } else if (data.error?.message) {
+          errorMessage = data.error.message;
+        } else if (data.message) {
+          errorMessage = data.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
 
       toast({
         title: 'Erro no upload',
