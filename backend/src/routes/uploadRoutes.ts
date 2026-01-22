@@ -50,8 +50,12 @@ router.post('/', authMiddleware, upload.array('documents', 10), async (req: Requ
   const filesToCleanUp: string[] = [];
 
   try {
+    console.log('DEBUG: Upload Route Hit');
+    console.log('DEBUG: Headers:', req.headers['content-type']);
     const userId = (req as any).user.userId;
     const files = req.files as Express.Multer.File[];
+
+    console.log('DEBUG: Files received:', files?.length || 0);
 
     if (!files || files.length === 0) {
       return res.status(400).json({
