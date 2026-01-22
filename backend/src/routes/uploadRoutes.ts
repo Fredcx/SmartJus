@@ -3,7 +3,6 @@ import prisma from '../config/database'; // Singleton import
 import { authMiddleware } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { DocumentAnalysisService } from '../services/documentAnalysisService';
 import caseAnalysisService from '../services/caseAnalysisService';
 
@@ -17,25 +16,10 @@ const analysisService = new DocumentAnalysisService();
 // ============================================
 // CONFIGURAR DIRETÓRIO DE UPLOADS
 // ============================================
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log('📁 Diretório de uploads criado:', uploadDir);
-}
-
-// ============================================
-// CONFIGURAR MULTER
-// ============================================
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'document-' + uniqueSuffix + ext);
-  }
-});
+// =====================
+// CONFIGURAR MULTER (MEMORY)
+// =====================
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
@@ -89,22 +73,16 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
 
     for (const file of files) {
       try {
-        console.log(`   📄 Lendo: ${file.originalname}`);
+        console.log(`   📄 Processando: ${file.originalname}`);
         const fileType = path.extname(file.originalname).toLowerCase().replace('.', '');
-        const text = await analysisService.extractText(file.path, fileType);
-
-        // Save extracted text to a file for later use (CaseAnalysisService)
-        const txtFileName = file.filename + '.txt';
-        const txtPath = path.join(uploadDir, txtFileName);
-        fs.writeFileSync(txtPath, text);
-        console.log(`      💾 Texto salvo em cache: ${txtFileName}`);
+        const text = await analysisService.extractText(file.buffer, fileType);
 
         combinedText += `\n\n--- INÍCIO DO ARQUIVO: ${file.originalname} ---\n${text}\n--- FIM DO ARQUIVO: ${file.originalname} ---\n`;
 
         fileInfos.push({
           file,
-          textLength: text.length,
-          extractedTextPath: txtPath
+          text,
+          textLength: text.length
         });
 
       } catch (err: any) {
@@ -132,10 +110,8 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
 
     // 3. CREATE SINGLE CASE
     console.log('\n📝 ETAPA 3: Criando processo único...');
-    // Use the first file as the "main" document URL for legacy reasons, or a placeholder
-    const mainDocumentUrl = `/uploads/${files[0].filename}`;
-
-    const caseData = analysisService.generateCaseData(analysis, userId, mainDocumentUrl);
+    // We'll set a placeholder or use the first file's eventual Supabase path
+    const caseData = analysisService.generateCaseData(analysis, userId, '');
 
     // Override description to mention multiple files if needed, or trust the summary
     if (files.length > 1) {
@@ -148,40 +124,63 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
     createdCaseId = newCase.id;
     console.log('✅ Processo criado:', newCase.id);
 
-    // 4. CREATE DOCUMENT RECORDS FOR ALL FILES
-    console.log('   📎 Anexando documentos ao processo...');
+    // 4. UPLOAD TO SUPABASE AND CREATE DOCUMENT RECORDS
+    console.log('   📎 Enviando arquivos para Supabase e vinculando ao processo...');
+    const { supabase } = await import('../config/supabase');
 
-    // Use fileInfos which has the extractedTextPath
-    const documentPromises = fileInfos.map(info => {
-      return prisma.document.create({
+    for (const info of fileInfos) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(info.file.originalname);
+      const storagePath = `${newCase.id}/document-${uniqueSuffix}${ext}`;
+      const txtPath = storagePath + '.txt';
+
+      // Upload main file
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, info.file.buffer, {
+          contentType: info.file.mimetype,
+        });
+
+      if (uploadError) {
+        console.error(`❌ Erro ao subir ${info.file.originalname}:`, uploadError);
+        continue;
+      }
+
+      // Upload text cache
+      await supabase.storage
+        .from('documents')
+        .upload(txtPath, Buffer.from(info.text), {
+          contentType: 'text/plain',
+        });
+
+      // Create record
+      await prisma.document.create({
         data: {
           name: info.file.originalname,
           type: path.extname(info.file.originalname).toLowerCase().replace('.', ''),
-          path: `/uploads/${info.file.filename}`,
-          extractedTextPath: info.extractedTextPath,
+          path: storagePath,
+          extractedTextPath: txtPath,
           caseId: newCase.id,
-          status: 'processed', // Considered processed as they were part of the initial analysis
+          status: 'processed',
           classification: {
-            type: analysis.documentType, // Apply generic classification for now, or could be improved later
+            type: analysis.documentType,
             confidence: analysis.confidence
           }
         }
       });
-    });
-
-    await Promise.all(documentPromises);
-    console.log(`✅ ${files.length} documentos vinculados.`);
+    }
 
     // 5. BACKGROUND STRATEGIC ANALYSIS
     caseAnalysisService.generateGlobalSummary(newCase.id).catch(err => {
       console.error(`   ⚠️ Falha no resumo estratégico background:`, err);
     });
 
-    // 6. RESPONSE (Standard Single Format)
-    console.log('\n' + '='.repeat(70));
-    console.log('✅ UPLOAD CONCLUÍDO');
-    console.log('='.repeat(70) + '\n');
+    // Get the primary document URL (first one uploaded)
+    const { data: publicUrlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(`${newCase.id}/document-${Date.now()}`); // Placeholder or actual path if we had it
 
+    // Response
     res.status(201).json({
       success: true,
       message: 'Documentos analisados e processo criado com sucesso',
@@ -192,17 +191,11 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
         confidence: analysis.confidence,
         extractedData: analysis.extractedData,
       },
-      documentUrl: mainDocumentUrl, // Legacy support
       fileCount: files.length
     });
 
   } catch (error: any) {
     console.error('\n❌ ERRO NO UPLOAD:', error);
-
-    // Cleanup files
-    filesToCleanUp.forEach(p => {
-      try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { }
-    });
 
     res.status(500).json({
       error: 'Erro ao processar upload',
@@ -214,16 +207,20 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
 // ============================================
 // GET - BAIXAR DOCUMENTO
 // ============================================
-router.get('/document/:filename', authMiddleware, (req: Request, res: Response) => {
+router.get('/document/:caseId/:filename', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { filename } = req.params;
-    const filePath = path.join(uploadDir, filename);
+    const { caseId, filename } = req.params;
+    const { supabase } = await import('../config/supabase');
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Arquivo não encontrado' });
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(`${caseId}/${filename}`, 60);
+
+    if (error || !data?.signedUrl) {
+      return res.status(404).json({ error: 'Arquivo não encontrado ou erro ao gerar link' });
     }
 
-    res.download(filePath);
+    res.redirect(data.signedUrl);
 
   } catch (error) {
     console.error('Erro ao baixar arquivo:', error);
