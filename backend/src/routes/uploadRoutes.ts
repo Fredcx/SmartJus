@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
 import { DocumentAnalysisService } from '../services/documentAnalysisService';
-import caseAnalysisService from './caseAnalysisService';
+import caseAnalysisService from '../services/caseAnalysisService';
 import { supabase } from '../config/supabase';
 
 const router = Router();
@@ -170,7 +170,7 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
     }
 
     // 5. BACKGROUND STRATEGIC ANALYSIS
-    caseAnalysisService.generateGlobalSummary(newCase.id).catch(err => {
+    caseAnalysisService.generateGlobalSummary(newCase.id).catch((err: any) => {
       console.error(`   ⚠️ Falha no resumo estratégico background:`, err);
     });
 
@@ -204,7 +204,6 @@ router.post('/analyze', authMiddleware, upload.array('documents', 10), async (re
 router.get('/document/:caseId/:filename', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { caseId, filename } = req.params;
-    const { supabase } = await import('../config/supabase');
 
     const { data, error } = await supabase.storage
       .from('documents')
