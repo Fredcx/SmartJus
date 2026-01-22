@@ -45,39 +45,37 @@ const upload = multer({
 // ============================================
 // POST - UPLOAD E ANÁLISE (AGGREGATED)
 // ============================================
-// Health check for this route
-router.get('/health', (req, res) => {
-  res.json({ status: 'gateway active' });
-});
-
-router.post('/', authMiddleware, upload.array('file_payload', 10), async (req: Request, res: Response) => {
+router.post('/', authMiddleware, async (req: Request, res: Response) => {
   let createdCaseId: string | null = null;
   const filesToCleanUp: string[] = [];
 
   try {
-    console.log('DEBUG: Upload Route Hit');
-    console.log('DEBUG: Headers:', req.headers['content-type']);
+    console.log('DEBUG: Gateway Route Hit (Base64 Mode)');
     const userId = (req as any).user.userId;
-    const files = req.files as Express.Multer.File[];
+    const { files: bodyFiles } = req.body;
 
-    console.log('DEBUG: Files received:', files?.length || 0);
-
-    if (!files || files.length === 0) {
+    if (!bodyFiles || bodyFiles.length === 0) {
       return res.status(400).json({
         error: 'Nenhum arquivo enviado',
         message: 'Por favor, envie pelo menos um arquivo PDF, DOCX ou TXT'
       });
     }
 
-    // Register files for cleanup in case of error
-    files.forEach(f => filesToCleanUp.push(f.path));
+    console.log(`📤 NOVO UPLOAD (JSON/Base64): ${bodyFiles.length} arquivo(s)`);
+
+    // Convert base64 to buffers
+    const files = bodyFiles.map((f: any) => ({
+      originalname: f.name,
+      buffer: Buffer.from(f.base64, 'base64'),
+      mimetype: f.mimetype || 'application/pdf'
+    }));
 
     console.log('\n' + '='.repeat(70));
-    console.log(`📤 NOVO UPLOAD: ${files.length} arquivo(s)`);
+    console.log(`📤 PROCESSANDO: ${files.length} arquivo(s) em memória`);
     console.log('='.repeat(70));
 
     // 1. EXTRACT TEXT FROM ALL FILES
-    console.log('\n🔍 ETAPA 1: Extraindo texto combinado e salvando cache...');
+    console.log('\n🔍 ETAPA 1: Extraindo texto e salvando cache...');
     let combinedText = '';
     const fileInfos = [];
 
@@ -108,7 +106,6 @@ router.post('/', authMiddleware, upload.array('file_payload', 10), async (req: R
 
     // 2. ANALYZE COMBINED TEXT
     console.log('\n🤖 ETAPA 2: Analisando contexto unificado com IA...');
-    // Only validate legal doc if we have enough text
     const isLegalDoc = analysisService.validateLegalDocument(combinedText);
 
     if (!isLegalDoc) {
@@ -120,10 +117,8 @@ router.post('/', authMiddleware, upload.array('file_payload', 10), async (req: R
 
     // 3. CREATE SINGLE CASE
     console.log('\n📝 ETAPA 3: Criando processo único...');
-    // We'll set a placeholder or use the first file's eventual Supabase path
     const caseData = analysisService.generateCaseData(analysis, userId, '');
 
-    // Override description to mention multiple files if needed, or trust the summary
     if (files.length > 1) {
       caseData.description = `(Análise baseada em ${files.length} documentos) ${caseData.description}`;
     }
@@ -134,7 +129,7 @@ router.post('/', authMiddleware, upload.array('file_payload', 10), async (req: R
     createdCaseId = newCase.id;
     console.log('✅ Processo criado:', newCase.id);
 
-    console.log('   📎 Enviando arquivos para Supabase e vinculando ao processo...');
+    console.log('   📎 Enviando arquivos para Supabase...');
 
     for (const info of fileInfos) {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

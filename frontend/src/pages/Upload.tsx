@@ -116,13 +116,26 @@ const Upload = () => {
     setIsUploading(true);
     setUploadProgress(0);
 
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('file_payload', file);
-    });
+    const fileToBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+          const base64String = (reader.result as string).split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = error => reject(error);
+      });
+    };
 
     try {
-      console.log(`📤 Enviando ${files.length} arquivos para análise...`);
+      console.log(`📤 Preparando ${files.length} arquivos para envio (Base64)...`);
+
+      const encodedFiles = await Promise.all(files.map(async (file) => ({
+        name: file.name,
+        mimetype: file.type,
+        base64: await fileToBase64(file)
+      })));
 
       // Simular progresso
       const progressInterval = setInterval(() => {
@@ -133,9 +146,11 @@ const Upload = () => {
           }
           return prev + 5;
         });
-      }, 500);
+      }, 300);
 
-      const response = await api.post('/v1/gateway-record', formData);
+      const response = await api.post('/v1/gateway-record', {
+        files: encodedFiles
+      });
 
       clearInterval(progressInterval);
       setUploadProgress(100);
