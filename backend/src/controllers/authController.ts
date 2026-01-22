@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
+import path from 'path';
 
 // const prisma = new PrismaClient(); // Removed
 
@@ -294,14 +296,35 @@ class AuthController {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const logoUrl = `/uploads/logos/${req.file.filename}`;
+      console.log('🖼️ Fazendo upload do logo para Supabase...');
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(req.file.originalname);
+      const storagePath = `logos/logo-${decoded.userId}-${uniqueSuffix}${ext}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error('❌ Erro no Supabase Storage:', uploadError);
+        throw new Error('Falha ao salvar imagem no storage');
+      }
+
+      // No lugar de usar a URL interna, usamos a URL pública ou assinada do Supabase
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(storagePath);
 
       await prisma.user.update({
         where: { id: decoded.userId },
-        data: { logoUrl },
+        data: { logoUrl: publicUrl },
       });
 
-      res.json({ logoUrl });
+      console.log('✅ Logo atualizado com sucesso:', publicUrl);
+      res.json({ logoUrl: publicUrl });
     } catch (error) {
       console.error('Erro ao fazer upload:', error);
       res.status(500).json({ error: 'Erro ao fazer upload' });
