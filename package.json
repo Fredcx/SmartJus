@@ -7,5 +7,10 @@
     ],
     "scripts": {
         "build": "npm run build --workspace=smart-jus-frontend"
+    },
+    "devDependencies": {
+        "typescript": "^4.9.5",
+        "@types/node": "^18.0.0",
+        "@types/express": "^4.17.17"
     }
 }
