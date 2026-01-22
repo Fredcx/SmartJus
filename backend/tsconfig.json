@@ -2,7 +2,10 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020", "DOM"],
+    "lib": [
+      "ES2020",
+      "DOM"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -15,8 +18,9 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": ["node"],
-    "typeRoots": ["./node_modules/@types"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src/**/*"
@@ -29,6 +33,8 @@
   ],
   "ts-node": {
     "esm": false,
-    "require": ["tsconfig-paths/register"]
+    "require": [
+      "tsconfig-paths/register"
+    ]
   }
 }
