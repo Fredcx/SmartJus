@@ -84,11 +84,7 @@ Responda APENAS JSON.`;
                 'gemini-1.5-flash-001',
                 'gemini-1.5-flash-latest',
                 'gemini-1.5-flash-8b',
-                'gemini-1.5-pro',         // <-- Adicionado (Mais potente)
-                'gemini-1.5-pro-001',     // <-- Adicionado
-                'gemini-1.5-pro-latest',  // <-- Adicionado
-                'gemini-pro',
-                'gemini-1.0-pro'
+                'gemini-1.5-pro'
             ];
 
             const currentModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';

@@ -57,38 +57,42 @@ export class DocumentAnalysisService {
     }
   }
 
-  async extractText(filePath: string, fileType: string): Promise<string> {
+  async extractText(input: string | Buffer, fileType?: string): Promise<string> {
     try {
-      console.log('📄 Extraindo texto do arquivo:', filePath);
+      console.log('📄 Extraindo texto do documento...');
 
-      if (fileType === 'pdf' || filePath.endsWith('.pdf')) {
+      let buffer: Buffer;
+      if (Buffer.isBuffer(input)) {
+        buffer = input;
+      } else {
+        buffer = fs.readFileSync(input);
+      }
+
+      const type = fileType || 'pdf';
+
+      if (type === 'pdf' || type.includes('pdf')) {
         try {
-          const dataBuffer = fs.readFileSync(filePath);
-          const data = await pdf(dataBuffer, { max: 0, version: 'default' });
-
+          const data = await pdf(buffer, { max: 0, version: 'default' });
           if (!data.text || data.text.trim().length === 0) {
             throw new Error('PDF não contém texto extraível');
           }
           return data.text;
         } catch (pdfError: any) {
           console.error('❌ Erro ao processar PDF:', pdfError.message);
-          if (pdfError.message.includes('XRef') || pdfError.message.includes('PDF') || pdfError.message.includes('encrypted')) {
-            throw new Error('PDF corrompido, protegido ou é uma imagem escaneada.');
-          }
-          throw pdfError;
+          throw new Error('Falha ao extrair texto do PDF');
         }
       }
 
-      if (fileType === 'docx' || filePath.endsWith('.docx')) {
-        const result = await mammoth.extractRawText({ path: filePath });
+      if (type === 'docx' || type.includes('officedocument') || type.includes('docx')) {
+        const result = await mammoth.extractRawText({ buffer });
         if (!result.value || result.value.trim().length === 0) {
           throw new Error('DOCX não contém texto extraível');
         }
         return result.value;
       }
 
-      if (fileType === 'txt' || filePath.endsWith('.txt')) {
-        const text = fs.readFileSync(filePath, 'utf-8');
+      if (type === 'txt' || type.includes('text/plain') || type.includes('txt')) {
+        const text = buffer.toString('utf-8');
         if (!text || text.trim().length === 0) throw new Error('Arquivo TXT está vazio');
         return text;
       }
@@ -142,25 +146,23 @@ REGRAS: Use null se não encontrar. Responda APENAS JSON puro.`;
       const fallbackModels = [
         'gemini-1.5-flash',
         'gemini-1.5-flash-001',
-        'gemini-1.5-flash-latest',
-        'gemini-pro',
-        'gemini-1.0-pro'
+        'gemini-1.5-flash-latest'
       ];
-      
+
       const currentModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
       // Tenta o atual e depois os outros da lista
       const modelsToTry = [currentModel, ...fallbackModels.filter(m => m !== currentModel)];
-      
+
       let analysis;
       let lastError;
 
       // Loop inteligente para trocar de modelo se der erro
       for (let i = 0; i < modelsToTry.length; i++) {
         const modelName = modelsToTry[i];
-        
+
         if (i > 0) {
-           console.log(`⚠️ Tentativa anterior falhou. Tentando modelo alternativo: ${modelName}`);
-           this.model = this.genAI.getGenerativeModel({
+          console.log(`⚠️ Tentativa anterior falhou. Tentando modelo alternativo: ${modelName}`);
+          this.model = this.genAI.getGenerativeModel({
             model: modelName,
             generationConfig: { temperature: 0.3, maxOutputTokens: 2000 }
           });
@@ -180,24 +182,24 @@ REGRAS: Use null se não encontrar. Responda APENAS JSON puro.`;
             console.log('✅ JSON válido recebido');
             break; // Sucesso!
           } catch (parseError) {
-             const jsonMatch = content.match(/\{[\s\S]*\}/);
-             if (jsonMatch) {
-               analysis = JSON.parse(jsonMatch[0]);
-               break;
-             }
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              analysis = JSON.parse(jsonMatch[0]);
+              break;
+            }
           }
         } catch (apiError: any) {
           lastError = apiError;
           console.error(`❌ Erro com modelo ${modelName}:`, apiError.message);
-          
-          const isModelError = apiError.message.includes('404') || 
-                               apiError.message.includes('not found') || 
-                               apiError.message.includes('not supported') ||
-                               apiError.message.includes('400');
-                               
+
+          const isModelError = apiError.message.includes('404') ||
+            apiError.message.includes('not found') ||
+            apiError.message.includes('not supported') ||
+            apiError.message.includes('400');
+
           if (isModelError) {
-             console.log(`⚠️ Modelo ${modelName} indisponível. Tentando próximo...`);
-             continue;
+            console.log(`⚠️ Modelo ${modelName} indisponível. Tentando próximo...`);
+            continue;
           }
           // Pequena pausa se não for erro de modelo
           await new Promise(resolve => setTimeout(resolve, 1500));

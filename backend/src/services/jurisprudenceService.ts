@@ -1,8 +1,5 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page } from 'puppeteer';
-
-puppeteer.use(StealthPlugin());
+import { getBrowser } from '../utils/browserHelper';
+import { Browser } from 'puppeteer-core';
 
 interface SearchResult {
   court: string;
@@ -22,23 +19,12 @@ interface PaginatedResults {
   pageSize: number;
   totalPages: number;
 }
-
 export class JurisprudenceService {
-  private browser: Browser | null = null;
+  private browser: any = null;
 
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
-      this.browser = await puppeteer.launch({
-        headless: 'new', // Updated to new headless mode
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-blink-features=AutomationControlled',
-          '--window-size=1920,1080'
-        ],
-      });
+      this.browser = await getBrowser();
     }
     return this.browser;
   }

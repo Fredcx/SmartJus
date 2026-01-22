@@ -38,7 +38,7 @@ sudo ufw --force enable
 
 # 5. Criar diretório da aplicação
 echo "📂 Criando pastas..."
-mkdir -p /root/app
+mkdir -p /var/www/legal-system
 
 echo "=========================================="
 echo "✅ SETUP BÁSICO CONCLUÍDO!"

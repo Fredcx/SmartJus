@@ -1,38 +1,49 @@
 import prisma from '../config/database';
-// import { saveFile, deleteFile } from '../utils/fileHandler'; // Removed (using Multer)
-import { deleteFile } from '../utils/fileHandler'; // Kept for delete logic if needed, or remove if unused
+import { supabase } from '../config/supabase';
+import { deleteFile } from '../utils/fileHandler';
 import { extractTextFromPDF } from '../utils/pdfParser';
 import classificationService from './classificationService';
 import individualSummaryService from './individualSummaryService';
 
 export class DocumentService {
-  // Updated to accept Multer file object and optional category
+  private BUCKET = 'documents';
+
   async uploadDocument(file: Express.Multer.File, caseId: string, category?: string) {
     try {
-      // Arquivo já foi salvo pelo Multer, temos o path em file.path
-      const filePath = file.path;
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = file.originalname.split('.').pop();
+      const fileName = `document-${uniqueSuffix}.${ext}`;
+      const filePath = `${caseId}/${fileName}`;
+
+      // 1. Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(this.BUCKET)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          cacheControl: '3600',
+        });
+
+      if (uploadError) throw uploadError;
 
       // Prepare initial data
       const data: any = {
         name: file.originalname,
         type: file.mimetype,
-        path: filePath,
+        path: filePath, // Storing Supabase path
         status: 'processing',
         caseId,
       };
 
-      // If it's an evidence upload, explicitly set classification or type
       if (category === 'evidence') {
         data.classification = { category: 'evidence', type: 'Prova Documental' };
       }
 
-      // Criar registro no banco
-      const document = await prisma.document.create({
-        data,
-      });
+      const document = await prisma.document.create({ data });
 
-      // Processar em background
-      this.processDocument(document.id, filePath).catch(console.error);
+      // Run processing
+      // In Vercel, we should probably wait for this if we want to be sure,
+      // but let's keep it async for now.
+      this.processDocument(document.id, file.buffer, filePath).catch(console.error);
 
       return document;
     } catch (error) {
@@ -41,24 +52,29 @@ export class DocumentService {
     }
   }
 
-  private async processDocument(documentId: string, filePath: string) {
+  private async processDocument(documentId: string, fileBuffer: Buffer, storagePath: string) {
     try {
       console.log(`Processing document ${documentId}...`);
 
-      // 1. Extrair texto
-      const text = await extractTextFromPDF(filePath);
+      // 1. Extrair texto (from buffer now)
+      const text = await extractTextFromPDF(fileBuffer);
 
-      // Save extracted text to file
-      const fs = require('fs');
-      const txtPath = filePath.replace(/\.[^/.]+$/, "") + ".txt";
-      fs.writeFileSync(txtPath, text);
+      // 2. Upload extracted text to Supabase
+      const txtPath = storagePath.replace(/\.[^/.]+$/, "") + ".txt";
+      const { error: txtError } = await supabase.storage
+        .from(this.BUCKET)
+        .upload(txtPath, Buffer.from(text), {
+          contentType: 'text/plain',
+        });
+
+      if (txtError) console.error('Error uploading text to Supabase:', txtError);
 
       await prisma.document.update({
         where: { id: documentId },
         data: { extractedTextPath: txtPath }
       });
 
-      // 2. Classificar
+      // 3. Classificar
       const classification = await classificationService.classifyDocument(text);
 
       await prisma.document.update({
@@ -69,20 +85,20 @@ export class DocumentService {
         }
       });
 
-      // 3. Resumo Individual
+      // 4. Resumo Individual
       const summary = await individualSummaryService.summarizeDocument(text, classification.type);
 
-      // 4. Update Final
+      // 5. Update Final
       await prisma.document.update({
         where: { id: documentId },
         data: {
           individualSummary: summary,
-          status: 'summarized', // Ready for case analysis
-          type: classification.type // Update main type field with detected type
+          status: 'summarized',
+          type: classification.type
         },
       });
 
-      // 5. Timeline Event
+      // 6. Timeline Event
       const document = await prisma.document.findUnique({
         where: { id: documentId },
         include: { case: true },
@@ -111,10 +127,19 @@ export class DocumentService {
   }
 
   async getDocumentsByCase(caseId: string) {
-    return prisma.document.findMany({
+    const documents = await prisma.document.findMany({
       where: { caseId },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Provide public URLs if needed, or signed URLs
+    return Promise.all(documents.map(async (doc) => {
+      const { data } = supabase.storage
+        .from(this.BUCKET)
+        .getPublicUrl(doc.path);
+
+      return { ...doc, url: data.publicUrl };
+    }));
   }
 
   async deleteDocument(documentId: string) {
@@ -123,7 +148,16 @@ export class DocumentService {
     });
 
     if (document) {
-      await deleteFile(document.path);
+      // Delete from Supabase
+      const filesToRemove = [document.path];
+      if (document.extractedTextPath) {
+        filesToRemove.push(document.extractedTextPath);
+      }
+
+      await supabase.storage
+        .from(this.BUCKET)
+        .remove(filesToRemove);
+
       await prisma.document.delete({
         where: { id: documentId },
       });

@@ -16,3 +16,12 @@ coverage/
 Thumbs.db
 npm-debug.log
 yarn-error.log
+
+# Uploads and Local Files
+backend/uploads/
+*.pdf
+*.docx
+*.txt
+!backend/test_doc*.txt
+*.tar
+

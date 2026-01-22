@@ -3,12 +3,12 @@ module.exports = {
         {
             name: 'legal-system-backend',
             script: './dist/server.js',
-            cwd: './backend',
+            cwd: '/var/www/legal-system/backend',
             env: {
                 NODE_ENV: 'production',
                 PORT: 3002,
             },
-            env_file: './backend/.env'
+            env_file: '.env'
         }
     ]
 };

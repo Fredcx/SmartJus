@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import { getBrowser } from '../../utils/browserHelper';
 import { SourceFetcher, CaseUpdateResult } from './SourceFetcher';
 
 export class DOUFetcher implements SourceFetcher {
@@ -9,10 +9,7 @@ export class DOUFetcher implements SourceFetcher {
         console.log(`[DOU] Starting search for CNJ: ${cnj}`);
         let browser;
         try {
-            browser = await puppeteer.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            });
+            browser = await getBrowser();
             const page = await browser.newPage();
 
             // Construct query URL

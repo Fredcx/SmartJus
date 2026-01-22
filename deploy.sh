@@ -7,7 +7,7 @@ set -e
 
 echo "🚀 Iniciando Deploy..."
 
-APP_DIR="/root/app"
+APP_DIR="/var/www/legal-system"
 cd $APP_DIR
 
 # 1. Setup Backend
@@ -32,9 +32,8 @@ cd ..
 
 # 3. Mover Build do Frontend para local que o Nginx leia
 echo "📂 Movendo frontend build..."
-# Opcional: Se configurar o Nginx para ler direto de /root/app/frontend/dist, não precisa mover.
-# Mas vamos garantir permissões corretas
-chmod -R 755 frontend/dist
+# Garantir permissões para o Nginx ler
+chmod -R 755 /var/www/legal-system
 
 # 4. Iniciar/Reiniciar Aplicação
 echo "🔄 Reiniciando PM2..."

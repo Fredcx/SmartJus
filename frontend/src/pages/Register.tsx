@@ -108,7 +108,7 @@ const Register = () => {
         <div className="relative z-10">
           <div className="flex items-center gap-2 text-2xl font-bold">
             <Scale className="w-8 h-8 text-blue-400" />
-            <span>SmartJust</span>
+            <span>SmartJus</span>
           </div>
           <p className="mt-4 text-slate-300 text-lg max-w-md">
             A plataforma completa para gestão do seu escritório de advocacia.

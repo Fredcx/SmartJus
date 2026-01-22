@@ -1,0 +1,18 @@
+const { Client } = require('pg');
+const client = new Client({
+  connectionString: 'postgresql://postgres.llshyrwxgcwfxtfmbskj:LegalSystem2024!@db.llshyrwxgcwfxtfmbskj.supabase.co:5432/postgres?sslmode=require'
+});
+console.log('🔄 pg: Connecting to db.llshyrwxgcwfxtfmbskj.supabase.co...');
+client.connect()
+  .then(() => {
+    console.log('✅ pg: SUCCESS');
+    return client.query('SELECT current_database(), current_user, now()');
+  })
+  .then(res => {
+    console.log('📊 Result:', res.rows[0]);
+    client.end();
+  })
+  .catch(e => {
+    console.error('❌ pg: FAILED:', e.message);
+    process.exit(1);
+  });

@@ -19,7 +19,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "backend/,frontend/,deploy.sh,setup-vps.sh,ecosystem.config.js,nginx.conf"
-          target: "/root/app"
+          target: "/var/www/legal-system"
           strip_components: 0
 
       - name: Execute Deploy Script
@@ -30,7 +30,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /root/app
+            cd /var/www/legal-system
             chmod +x deploy.sh setup-vps.sh
             
             # Setup Inicial (Se precisarmos rodar configuração de Nginx)

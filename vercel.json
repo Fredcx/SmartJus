@@ -1,0 +1,23 @@
+{
+    "version": 2,
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "/backend/api/index.ts"
+        },
+        {
+            "source": "/uploads/(.*)",
+            "destination": "/backend/uploads/$1"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/frontend/index.html"
+        }
+    ],
+    "crons": [
+        {
+            "path": "/api/tracking/check-all",
+            "schedule": "0 8 * * *"
+        }
+    ]
+}

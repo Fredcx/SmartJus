@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import { getBrowser } from '../../utils/browserHelper';
 import { SourceFetcher, CaseUpdateResult } from './SourceFetcher';
 
 export class DJENFetcher implements SourceFetcher {
@@ -9,10 +9,7 @@ export class DJENFetcher implements SourceFetcher {
         console.log(`[DJEN] Starting search for CNJ: ${cnj}`);
         let browser;
         try {
-            browser = await puppeteer.launch({
-                headless: true, // Use "new" or true. Using true for stability.
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-            });
+            browser = await getBrowser();
             const page = await browser.newPage();
 
             // Set a generous timeout for government sites
