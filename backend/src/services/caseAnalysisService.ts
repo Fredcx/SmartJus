@@ -89,10 +89,9 @@ Responda APENAS JSON.`;
             // === NOVA LISTA DE FALLBACK ULTRA COMPLETA ===
             const fallbackModels = [
                 'gemini-1.5-flash',
-                'gemini-1.5-flash-001',
                 'gemini-1.5-flash-latest',
-                'gemini-1.5-flash-8b',
-                'gemini-1.5-pro'
+                'gemini-1.5-pro',
+                'gemini-pro'
             ];
 
             const currentModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';

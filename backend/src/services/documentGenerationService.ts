@@ -38,9 +38,38 @@ export class DocumentGenerationService {
 
     this.genAI = new GoogleGenerativeAI(apiKey);
 
-    // Usar gemini-1.5-flash (rápido) ou gemini-1.5-pro (melhor qualidade)
     const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
     this.model = this.genAI.getGenerativeModel({ model: modelName });
+  }
+
+  private async getModelWithFallback(prompt: string): Promise<string> {
+    const models = [
+      process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-pro'
+    ];
+
+    let lastError;
+    // Remove duplicates
+    const uniqueModels = [...new Set(models)];
+
+    for (const modelName of uniqueModels) {
+      try {
+        const model = this.genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      } catch (error: any) {
+        lastError = error;
+        console.error(`⚠️ Erro com modelo ${modelName}:`, error.message);
+        if (error.message.includes('404') || error.message.includes('not found')) {
+          continue;
+        }
+        break; // Stop if it's a non-404 error (e.g. 401, 429)
+      }
+    }
+    throw lastError || new Error('Nenhum modelo Gemini funcionou.');
   }
 
   // ============================================
@@ -48,11 +77,10 @@ export class DocumentGenerationService {
   // ============================================
   private async generateText(prompt: string): Promise<string> {
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
+      return await this.getModelWithFallback(prompt);
     } catch (error: any) {
       console.error('❌ Erro ao chamar Gemini:', error);
+      // ... existing error logic ...
 
       if (error.status === 429 || (error.message && error.message.includes('429'))) {
         throw new Error('Cota da IA excedida (Erro 429). Aguarde alguns instantes ou verifique seu plano do Gemini.');
