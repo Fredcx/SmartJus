@@ -3,15 +3,11 @@
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/backend/api/index.ts"
-        },
-        {
-            "source": "/uploads/(.*)",
-            "destination": "/backend/uploads/$1"
+            "destination": "/api/index.ts"
         },
         {
             "source": "/(.*)",
-            "destination": "/frontend/index.html"
+            "destination": "/$1"
         }
     ],
     "crons": [
