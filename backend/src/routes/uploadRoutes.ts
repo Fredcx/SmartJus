@@ -211,6 +211,74 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 });
 
 // ============================================
+// POST - UPLOAD POR REFERÊNCIA (VIA STORAGE)
+// ============================================
+router.post('/from-storage', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { files: storageFiles, tempId } = req.body;
+
+    if (!storageFiles || storageFiles.length === 0) {
+      return res.status(400).json({ error: 'Nenhum caminho de arquivo fornecido' });
+    }
+
+    console.log(`\n📦 PROCESSANDO VIA STORAGE: ${storageFiles.length} arquivo(s)`);
+
+    const files = await Promise.all(storageFiles.map(async (f: any) => {
+      console.log(`   ⬇️ Baixando do storage: ${f.path}`);
+
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(f.path);
+
+      if (error || !data) {
+        throw new Error(`Falha ao baixar ${f.name} do storage: ${error?.message}`);
+      }
+
+      const buffer = Buffer.from(await data.arrayBuffer());
+
+      return {
+        originalname: f.name,
+        buffer,
+        mimetype: f.mimetype || 'application/pdf',
+        storagePath: f.path // Guardar pra limpar depois se quiser, ou mover
+      };
+    }));
+
+    // Reutiliza a lógica unificada de processamento
+    const result = await processFileBuffers(files, userId);
+
+    // OPCIONAL: Limpar arquivos temporários do storage
+    try {
+      const pathsToDelete = storageFiles.map((f: any) => f.path);
+      await supabase.storage.from('documents').remove(pathsToDelete);
+      console.log('   🧹 Limpeza de arquivos temporários concluída');
+    } catch (cleanupError) {
+      console.warn('   ⚠️ Falha ao limpar arquivos temporários:', cleanupError);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Documentos processados com sucesso via storage',
+      case: result.case,
+      analysis: {
+        documentType: result.analysis.documentType,
+        summary: result.analysis.summary,
+        confidence: result.analysis.confidence,
+        extractedData: result.analysis.extractedData,
+      }
+    });
+
+  } catch (error: any) {
+    console.error('\n❌ ERRO NO PROCESSAMENTO VIA STORAGE:', error);
+    res.status(500).json({
+      error: 'Erro ao processar arquivos do storage',
+      message: error.message || 'Erro interno do servidor'
+    });
+  }
+});
+
+// ============================================
 // POST - CHUNKED UPLOAD
 // ============================================
 router.post('/chunk', authMiddleware, async (req: Request, res: Response) => {

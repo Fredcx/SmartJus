@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Upload as UploadIcon, FileText, Loader2, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import api from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 const Upload = () => {
   const navigate = useNavigate();
@@ -101,7 +102,7 @@ const Upload = () => {
   };
 
   // ============================================
-  // UPLOAD AND ANALYZE
+  // UPLOAD AND ANALYZE (DIRECT TO SUPABASE)
   // ============================================
   const handleUpload = async () => {
     if (files.length === 0) {
@@ -116,53 +117,62 @@ const Upload = () => {
     setIsUploading(true);
     setUploadProgress(0);
 
-    const fileToBase64 = (file: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = error => reject(error);
-      });
-    };
-
-    let progressInterval: any = null;
-
     try {
-      console.log('🚀 Usando modo DIRECT (Base64)...');
+      console.log('🚀 Iniciando Upload Direto para Supabase...');
 
-      progressInterval = setInterval(() => {
-        setUploadProgress(prev => (prev >= 90 ? 90 : prev + 5));
-      }, 300);
+      const uploadResults = [];
+      const totalSteps = files.length * 2; // Upload + backend call (simulated)
+      let currentStep = 0;
 
-      const encodedFiles = await Promise.all(files.map(async (file) => ({
-        name: file.name,
-        mimetype: file.type,
-        base64: await fileToBase64(file)
-      })));
+      // 1. Upload para Pasta Temporária no Supabase
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      const response = await api.post('/v1/data-record', {
-        files: encodedFiles
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+        const filePath = `temp_uploads/${tempId}/${fileName}`;
+
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .upload(filePath, file);
+
+        if (error) {
+          console.error(`❌ Erro ao subir ${file.name}:`, error);
+          throw new Error(`Falha no upload de ${file.name}`);
+        }
+
+        uploadResults.push({
+          name: file.name,
+          path: filePath,
+          mimetype: file.type
+        });
+
+        currentStep++;
+        setUploadProgress(Math.round((currentStep / totalSteps) * 100));
+      }
+
+      console.log('✅ Arquivos no storage. Chamando processamento backend...');
+
+      // 2. Notificar Backend para Processar por Referência
+      const response = await api.post('/v1/data-record/from-storage', {
+        files: uploadResults,
+        tempId
       });
 
-      if (progressInterval) clearInterval(progressInterval);
       setUploadProgress(100);
-
       console.log('✅ Resposta recebida:', response.data);
       setAnalysisResult(response.data);
-      setFiles([]); // Clear queue on success
+      setFiles([]); // Limpa fila
 
       toast({
         title: 'Processamento concluído!',
-        description: 'Seus documentos foram analisados.'
+        description: 'Seus documentos foram analisados via storage direto.'
       });
 
     } catch (error: any) {
-      console.error('❌ Erro ao fazer upload:', error);
+      console.error('❌ Erro no fluxo de upload:', error);
 
-      const data = error.response?.data;
-      const errorMessage = typeof data === 'string' ? data :
-        (typeof data?.error === 'string' ? data.error :
-          (String(data?.error?.message || data?.message || error.message || 'Erro ao processar os arquivos')));
+      const errorMessage = error.message || 'Erro ao processar os arquivos';
 
       toast({
         title: 'Erro no upload',
