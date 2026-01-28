@@ -106,19 +106,18 @@ export class DocumentAnalysisService {
     }
   }
 
-  async analyzeDocument(text: string): Promise<DocumentAnalysis> {
+  async analyzeDocument(text: string, fileBuffer?: Buffer, fileType?: string): Promise<DocumentAnalysis> {
     await this.initModel();
     try {
       console.log('🤖 Analisando documento com Gemini...');
-      console.log('📏 Tamanho do texto:', text.length, 'caracteres');
 
-      const textSample = text.substring(0, 15000);
+      const isLowText = !text || text.trim().length < 100;
+      const canUseMultimodal = fileBuffer && (fileType === 'pdf' || fileType?.includes('pdf'));
+
+      let parts: any[] = [];
 
       const prompt = `Você é um assistente jurídico especializado em análise de documentos processuais brasileiros.
-Analise o documento jurídico abaixo e extraia as seguintes informações:
-
-**DOCUMENTO:**
-${textSample}
+Analise o documento jurídico fornecido e extraia as seguintes informações:
 
 **INSTRUÇÕES:**
 Responda APENAS com um JSON válido no seguinte formato:
@@ -141,48 +140,54 @@ Responda APENAS com um JSON válido no seguinte formato:
 }
 REGRAS: Use null se não encontrar. Responda APENAS JSON puro.`;
 
+      if (isLowText && canUseMultimodal) {
+        console.log('📸 Texto insuficiente. Usando modo Multimodal (PDF direto para IA)...');
+        parts = [
+          {
+            inlineData: {
+              data: fileBuffer!.toString('base64'),
+              mimeType: 'application/pdf'
+            }
+          },
+          { text: prompt }
+        ];
+      } else {
+        console.log('📄 Usando modo Texto (Len:', text.length, ')');
+        parts = [{ text: `${prompt}\n\n**CONTEÚDO DO DOCUMENTO:**\n${text.substring(0, 30000)}` }];
+      }
+
       console.log('🔄 Enviando para Gemini...');
 
-      // LISTA DE MODELOS DE FALLBACK (AUTO-CORREÇÃO)
       const fallbackModels = [
         'gemini-2.0-flash',
-        'gemini-flash-latest',
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-latest'
+        'gemini-1.5-flash'
       ];
 
       const currentModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-      // Tenta o atual e depois os outros da lista
       const modelsToTry = [currentModel, ...fallbackModels.filter(m => m !== currentModel)];
 
       let analysis;
       let lastError;
 
-      // Loop inteligente para trocar de modelo se der erro
       for (let i = 0; i < modelsToTry.length; i++) {
         const modelName = modelsToTry[i];
 
         if (i > 0) {
-          console.log(`⚠️ Tentativa anterior falhou. Tentando modelo alternativo: ${modelName}`);
-          this.model = this.genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: { temperature: 0.3, maxOutputTokens: 2000 }
-          });
+          this.model = this.genAI.getGenerativeModel({ model: modelName });
         }
 
         try {
-          console.log(`🔄 Tentando analisar com modelo: ${modelName}`);
-          const result = await this.model.generateContent(prompt);
+          console.log(`🔄 Tentando com ${modelName}...`);
+          const result = await this.model.generateContent(parts);
           const response = await result.response;
           let content = response.text();
 
-          console.log('📥 Resposta recebida do Gemini');
           content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
           try {
             analysis = JSON.parse(content);
-            console.log('✅ JSON válido recebido');
-            break; // Sucesso!
+            console.log('✅ Sucesso na análise');
+            break;
           } catch (parseError) {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
@@ -192,24 +197,14 @@ REGRAS: Use null se não encontrar. Responda APENAS JSON puro.`;
           }
         } catch (apiError: any) {
           lastError = apiError;
-          console.error(`❌ Erro com modelo ${modelName}:`, apiError.message);
-
-          const isModelError = apiError.message.includes('404') ||
-            apiError.message.includes('not found') ||
-            apiError.message.includes('not supported') ||
-            apiError.message.includes('400');
-
-          if (isModelError) {
-            console.log(`⚠️ Modelo ${modelName} indisponível. Tentando próximo...`);
-            continue;
-          }
-          // Pequena pausa se não for erro de modelo
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          console.error(`❌ Erro ${modelName}:`, apiError.message);
+          if (apiError.message.includes('404') || apiError.message.includes('400')) continue;
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
 
       if (!analysis) {
-        throw lastError || new Error('Falha ao analisar documento após tentativas com múltiplos modelos');
+        throw lastError || new Error('Falha total na análise Gemini');
       }
 
       return { ...analysis, fullText: text };
@@ -218,7 +213,7 @@ REGRAS: Use null se não encontrar. Responda APENAS JSON puro.`;
       console.error('❌ Erro fatal:', error);
       return {
         documentType: 'outro',
-        summary: 'Erro na análise automática (Verifique API Key/Modelos)',
+        summary: 'Erro na análise (Digitalizado ou protegido)',
         extractedData: { parties: {} },
         confidence: 0,
         fullText: text

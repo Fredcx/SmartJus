@@ -62,11 +62,19 @@ async function processFileBuffers(files: { originalname: string, buffer: Buffer,
 
     for (const file of files) {
       try {
-        console.log(`   📄 Processando: ${file.originalname}`);
+        console.log(`   📄 Processando: ${file.originalname} (Buffer: ${file.buffer.length} bytes)`);
         const fileType = path.extname(file.originalname).toLowerCase().replace('.', '');
-        const text = await analysisService.extractText(file.buffer, fileType);
 
-        combinedText += `\n\n--- INÍCIO DO ARQUIVO: ${file.originalname} ---\n${text}\n--- FIM DO ARQUIVO: ${file.originalname} ---\n`;
+        let text = '';
+        try {
+          text = await analysisService.extractText(file.buffer, fileType);
+          console.log(`   ✅ Texto extraído: ${text.length} caracteres`);
+        } catch (extractErr: any) {
+          console.warn(`   ⚠️ Extração falhou para ${file.originalname}: ${extractErr.message}`);
+          text = ''; // Garantir vazio para o fallback multimodal
+        }
+
+        combinedText += `\n\n--- INÍCIO DO ARQUIVO: ${file.originalname} ---\n${text || '[Arquivo digitalizado ou sem texto extraível]'}\n--- FIM DO ARQUIVO: ${file.originalname} ---\n`;
 
         fileInfos.push({
           file,
@@ -75,20 +83,29 @@ async function processFileBuffers(files: { originalname: string, buffer: Buffer,
         });
 
       } catch (err: any) {
-        console.warn(`   ⚠️ Falha ao ler ${file.originalname}, pulando...`);
+        console.warn(`   ⚠️ Erro crítico ao processar ${file.originalname}, pulando...`, err);
       }
     }
 
-    if (!combinedText.trim()) {
-      throw new Error('Não foi possível extrair texto de nenhum dos arquivos enviados.');
+    if (!combinedText.trim() && fileInfos.length === 0) {
+      throw new Error('Não foi possível extrair texto de nenhum dos arquivos enviados e nenhum arquivo válido para análise multimodal.');
     }
 
     console.log(`✅ Texto combinado total: ${combinedText.length} caracteres`);
 
-    // 2. ANALYZE COMBINED TEXT
-    console.log('\n🤖 ETAPA 2: Analisando contexto unificado com IA...');
-    const analysis = await analysisService.analyzeDocument(combinedText);
-    console.log('✅ Análise unificada concluída:', analysis.documentType);
+    // Se temos arquivos mas nenhum texto, pegamos o primeiro documento para tentar análise multimodal
+    const firstFile = fileInfos.length > 0 ? fileInfos[0].file : null;
+
+    // 2. ANALYZE DOCUMENTS
+    console.log('\n🤖 ETAPA 2: Analisando contexto com IA (Multimodal habilitado)...');
+
+    const analysis = await analysisService.analyzeDocument(
+      combinedText,
+      firstFile?.buffer,
+      firstFile ? path.extname(firstFile.originalname).toLowerCase().replace('.', '') : undefined
+    );
+
+    console.log('✅ Análise concluída:', analysis.documentType);
 
     // 3. CREATE SINGLE CASE
     console.log('\n📝 ETAPA 3: Criando processo único...');
@@ -232,16 +249,20 @@ router.post('/from-storage', authMiddleware, async (req: Request, res: Response)
         .download(f.path);
 
       if (error || !data) {
-        throw new Error(`Falha ao baixar ${f.name} do storage: ${error?.message}`);
+        console.error(`   ❌ Falha no download de ${f.name}:`, error);
+        throw new Error(`Falha ao baixar ${f.name} do storage: ${error?.message || 'Sem dados'}`);
       }
 
-      const buffer = Buffer.from(await data.arrayBuffer());
+      // Converte Blob/ArrayBuffer para Buffer de forma segura para Vercel/Node
+      const arrayBuffer = await data.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      console.log(`   ✅ Download concluído: ${buffer.length} bytes`);
 
       return {
         originalname: f.name,
         buffer,
         mimetype: f.mimetype || 'application/pdf',
-        storagePath: f.path // Guardar pra limpar depois se quiser, ou mover
+        storagePath: f.path
       };
     }));
 
